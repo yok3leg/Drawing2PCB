@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drawing2PCB — Circuit Designer</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">⚡ Drawing2PCB</div>
+  <nav id="tabs">
+    <button class="tab active" data-view="schematic">1 · Schematic</button>
+    <button class="tab" data-view="import">2 · Import Drawing</button>
+    <button class="tab" data-view="pcb">3 · PCB</button>
+  </nav>
+  <div class="spacer"></div>
+  <div class="topactions">
+    <input id="projName" value="untitled" title="Project name" spellcheck="false">
+    <button id="btnNew" title="New project">New</button>
+    <button id="btnOpen" title="Open .d2p.json project">Open</button>
+    <button id="btnSave" title="Save project as .d2p.json">Save</button>
+    <button id="btnDemo" title="Load a demo circuit">Demo</button>
+    <button id="btnHelp" title="Keyboard shortcuts &amp; help">?</button>
+    <input type="file" id="fileOpen" accept=".json" hidden>
+  </div>
+</header>
+
+<main>
+<!-- ===================== SCHEMATIC ===================== -->
+<section id="view-schematic" class="view active">
+  <aside class="palette">
+    <input id="palSearch" placeholder="Search parts…" spellcheck="false">
+    <div id="palList"></div>
+    <div class="hint">Drag a part onto the sheet, or click it then click the sheet.<br><b>W</b> wire · <b>R</b> rotate · <b>M</b> mirror · <b>Del</b> delete · <b>Esc</b> cancel · right-drag / wheel to pan &amp; zoom.</div>
+  </aside>
+
+  <div class="workarea">
+    <div class="toolbar" id="scTools">
+      <button data-tool="select" class="active" title="Select / move (V)">↖ Select</button>
+      <button data-tool="wire" title="Draw wire (W)">╱ Wire</button>
+      <button data-tool="junction" title="Place junction dot (J)">● Junction</button>
+      <button data-tool="label" title="Net label (L)">⌇ Label</button>
+      <span class="sep"></span>
+      <button id="scRotate" title="Rotate (R)">⟳</button>
+      <button id="scMirror" title="Mirror (M)">⇋</button>
+      <button id="scDup" title="Duplicate (Ctrl+D)">⧉</button>
+      <button id="scDelete" title="Delete (Del)">🗑</button>
+      <span class="sep"></span>
+      <button id="scUndo" title="Undo (Ctrl+Z)">↶</button>
+      <button id="scRedo" title="Redo (Ctrl+Y)">↷</button>
+      <span class="sep"></span>
+      <button id="scFit" title="Zoom to fit (F)">⤢ Fit</button>
+      <button id="scGrid" class="active" title="Toggle grid (G)">▦</button>
+      <button id="scAnnotate" title="Renumber references R1, R2, …"># Annotate</button>
+      <button id="scErc" title="Electrical rules check">✓ ERC</button>
+      <span class="sep"></span>
+      <button id="scToPcb" class="primary" title="Generate PCB from this schematic">→ PCB</button>
+    </div>
+    <div class="canvaswrap" id="scWrap">
+      <svg id="sc" xmlns="http://www.w3.org/2000/svg" tabindex="0">
+        <defs>
+          <pattern id="gridP" width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="0" cy="0" r="0.6" class="griddot"/>
+          </pattern>
+        </defs>
+        <g id="scViewport">
+          <rect id="scGridRect" x="-5000" y="-5000" width="10000" height="10000" fill="url(#gridP)"/>
+          <g id="scWires"></g>
+          <g id="scComps"></g>
+          <g id="scJunctions"></g>
+          <g id="scLabels"></g>
+          <g id="scOverlay"></g>
+        </g>
+      </svg>
+      <div id="scCoord" class="coord"></div>
+    </div>
+  </div>
+
+  <aside class="inspector" id="scInspector">
+    <h3>Properties</h3>
+    <div id="scProps" class="props"><div class="muted">Nothing selected.</div></div>
+    <h3>Nets <span id="netCount" class="badge">0</span></h3>
+    <div id="scNets" class="netlist"></div>
+    <h3>ERC</h3>
+    <div id="scErcOut" class="erc muted">Run ERC to check for unconnected pins and shorts.</div>
+  </aside>
+</section>
+
+<!-- ===================== IMPORT ===================== -->
+<section id="view-import" class="view">
+  <aside class="palette impctl">
+    <h3>1. Load image</h3>
+    <div id="imgDrop" class="dropzone">Drop a photo / scan of a hand-drawn circuit here<br><small>or click to choose (PNG / JPG)</small>
+      <input type="file" id="imgFile" accept="image/*" hidden>
+    </div>
+    <button id="imgSample" class="wide">Use built-in sample drawing</button>
+
+    <h3>2. Recognize</h3>
+    <label>Ink threshold <span id="thrVal">25</span><input type="range" id="thr" min="5" max="80" value="25"></label>
+    <label>Min wire length (px) <span id="minLenVal">30</span><input type="range" id="minLen" min="10" max="150" value="30"></label>
+    <label>Symbol box padding <span id="padVal">6</span><input type="range" id="boxPad" min="0" max="30" value="6"></label>
+    <button id="btnDetect" class="wide primary">Detect (offline CV)</button>
+    <details id="aiBox">
+      <summary>Analyze with AI (Claude vision)</summary>
+      <label>API key <input id="aiKey" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off"></label>
+      <label>Model
+        <select id="aiModel">
+          <option value="claude-sonnet-5">claude-sonnet-5 (fast)</option>
+          <option value="claude-opus-5">claude-opus-5 (best)</option>
+          <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (cheap)</option>
+        </select>
+      </label>
+      <button id="btnAI" class="wide">Analyze with AI</button>
+      <div class="hint">The key is kept only in this browser (localStorage) and sent directly to api.anthropic.com. Serve the app over http:// (e.g. <code>python -m http.server</code>) if your browser blocks the request from file://.</div>
+    </details>
+
+    <h3>3. Fix &amp; build</h3>
+    <div class="hint">Click a box to set its type; drag to move, drag the corner to resize; <b>Del</b> removes. Drag wire ends to fix connections.</div>
+    <div class="row">
+      <button id="impAddBox" title="Draw a new symbol box (B)">+ Box</button>
+      <button id="impAddWire" title="Draw a new wire (W)">+ Wire</button>
+      <button id="impClear">Clear</button>
+    </div>
+    <label>Show <select id="impShow"><option value="all">image + overlay</option><option value="bin">binary ink</option><option value="skel">skeleton</option><option value="img">image only</option></select></label>
+    <button id="btnBuild" class="wide primary">Build schematic →</button>
+    <div id="impStatus" class="muted"></div>
+  </aside>
+
+  <div class="workarea">
+    <div class="canvaswrap dark scroll" id="impWrap">
+      <div id="impStage">
+        <canvas id="impCanvas"></canvas>
+        <svg id="impSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+  </div>
+
+  <aside class="inspector">
+    <h3>Detected <span id="impCount" class="badge">0</span></h3>
+    <div id="impList" class="props"></div>
+    <h3>Selected</h3>
+    <div id="impProps" class="props"><div class="muted">Select a box or wire.</div></div>
+  </aside>
+</section>
+
+<!-- ===================== PCB ===================== -->
+<section id="view-pcb" class="view">
+  <aside class="palette">
+    <h3>Board</h3>
+    <label>Width (mm) <input id="pcbW" type="number" value="50" min="10" step="1"></label>
+    <label>Height (mm) <input id="pcbH" type="number" value="40" min="10" step="1"></label>
+    <label>Trace width (mm) <input id="pcbTrace" type="number" value="0.4" min="0.15" step="0.05"></label>
+    <label>Clearance (mm) <input id="pcbClr" type="number" value="0.3" min="0.15" step="0.05"></label>
+    <label>Copper layers <select id="pcbLayers"><option value="2">2 (top + bottom)</option><option value="1">1 (bottom only)</option></select></label>
+    <button id="pcbFromSch" class="wide primary">Generate from schematic</button>
+    <h3>Placement</h3>
+    <button id="pcbAutoPlace" class="wide">Auto-place (anneal)</button>
+    <div class="hint">Or drag footprints by hand. <b>R</b> rotates, <b>F</b> flips the selected part to the other side.</div>
+    <h3>Routing</h3>
+    <button id="pcbRoute" class="wide">Auto-route</button>
+    <button id="pcbUnroute" class="wide">Remove all traces</button>
+    <div id="pcbRouteStat" class="muted"></div>
+    <h3>View</h3>
+    <label class="chk"><input type="checkbox" id="lyTop" checked> Top copper</label>
+    <label class="chk"><input type="checkbox" id="lyBot" checked> Bottom copper</label>
+    <label class="chk"><input type="checkbox" id="lySilk" checked> Silkscreen</label>
+    <label class="chk"><input type="checkbox" id="lyRat" checked> Ratlines</label>
+  </aside>
+
+  <div class="workarea">
+    <div class="toolbar">
+      <button id="pcbFit">⤢ Fit</button>
+      <button id="pcbRot">⟳ Rotate</button>
+      <button id="pcbFlip">⇅ Flip side</button>
+      <span class="sep"></span>
+      <span id="pcbInfo" class="muted"></span>
+    </div>
+    <div class="canvaswrap dark" id="pcbWrap">
+      <svg id="pcb" xmlns="http://www.w3.org/2000/svg" tabindex="0"><g id="pcbViewport"></g></svg>
+    </div>
+  </div>
+
+  <aside class="inspector">
+    <h3>Export</h3>
+    <div class="exports">
+      <button id="expEasySch">EasyEDA schematic (.json)</button>
+      <button id="expEasyPcb">EasyEDA PCB (.json)</button>
+      <button id="expKicadNet">KiCad netlist (.net)</button>
+      <button id="expGerber">Gerber + drill (.zip)</button>
+      <button id="expBom">BOM (.csv)</button>
+      <button id="expSvg">PCB image (.svg)</button>
+    </div>
+    <div class="hint">
+      <b>EasyEDA Std:</b> File → Open → EasyEDA… → pick the .json (best-effort format, check pins after opening).<br>
+      <b>Gerber zip:</b> EasyEDA (Import → Gerber), JLCPCB, PCBWay, any fab.<br>
+      <b>KiCad netlist:</b> KiCad Pcbnew / EasyEDA Pro → Import → Netlist.
+    </div>
+    <h3>Selected footprint</h3>
+    <div id="pcbProps" class="props"><div class="muted">Click a footprint.</div></div>
+  </aside>
+</section>
+</main>
+
+<footer id="status">Ready.</footer>
+
+<div id="modal" class="modal" hidden><div class="modalbox"><div id="modalBody"></div><button id="modalClose">Close</button></div></div>
+
+<script src="js/lib.js"></script>
+<script src="js/components.js"></script>
+<script src="js/footprints.js"></script>
+<script src="js/netlist.js"></script>
+<script src="js/schematic.js"></script>
+<script src="js/vision.js"></script>
+<script src="js/pcb.js"></script>
+<script src="js/exporters.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
